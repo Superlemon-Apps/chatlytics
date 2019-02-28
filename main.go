@@ -19,7 +19,7 @@ import (
 
 func beforeEvictHook(db *sql.DB) func(map[string]int) {
 	return func(eventCntMap map[string]int) {
-		query := "INSERT INTO chat_click_event(shop_id, hour, count) values(?, ?, ?) ON DUPLICATE KEY UPDATE count = count + values(count)"
+		query := "INSERT INTO chat_click_event(shop_id, day, hour, url, count) values(?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE count = count + values(count)"
 		for k, v := range eventCntMap {
 			log.Println("got query: ", query)
 			insert, err := db.Prepare(query)
@@ -27,7 +27,7 @@ func beforeEvictHook(db *sql.DB) func(map[string]int) {
 				panic(err)
 			}
 
-			_, err = insert.Exec(strings.Split(k, "|")[0], strings.Split(k, "|")[1], v)
+			_, err = insert.Exec(strings.Split(k, "|")[0], strings.Split(k, "|")[1], strings.Split(k, "|")[2], strings.Split(k, "|")[3], v)
 			if err != nil {
 				panic(err)
 			}
@@ -38,7 +38,9 @@ func beforeEvictHook(db *sql.DB) func(map[string]int) {
 
 func handler(ec ecount.Ecount) gin.HandlerFunc {
 	fn := func(ginContext *gin.Context) {
-		key := fmt.Sprintf("%s|%s", ginContext.Param("shop"), time.Now().Format("2006010215"))
+		t := time.Now()
+		log.Println("query ", ginContext.Query("url"))
+		key := fmt.Sprintf("%s|%s|%s|%s", ginContext.Query("shop_id"), t.Format("20060102"), t.Format("15"), ginContext.Query("url"))
 		ec.Incr(key)
 		ginContext.JSON(http.StatusNoContent, nil)
 	}
@@ -52,12 +54,12 @@ func main() {
 	}
 	defer db.Close()
 
-	ec := ecount.New(time.Second*1, beforeEvictHook(db))
+	ec := ecount.New(time.Second*60, beforeEvictHook(db))
 	defer ec.Stop()
 
 	r := gin.New()
 	r.Use(gin.Logger())
-	r.GET("/chatlytics/:shop", handler(ec))
+	r.GET("/chatlytics", handler(ec))
 
 	srv := &http.Server{
 		Addr:    ":8080",
