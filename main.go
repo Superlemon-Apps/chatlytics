@@ -13,13 +13,13 @@ import (
 
 	"database/sql"
 	"github.com/gin-gonic/gin"
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/sankalpjonn/ecount"
 )
 
 func beforeEvictHook(db *sql.DB) func(map[string]int) {
 	return func(eventCntMap map[string]int) {
-		query := "INSERT INTO chat_click_event(shop_id, hour, count) values(?, ?, ?)"
+		query := "INSERT INTO chat_click_event(shop_id, hour, count) values(?, ?, ?) ON DUPLICATE KEY UPDATE count = count + values(count)"
 		for k, v := range eventCntMap {
 			log.Println("got query: ", query)
 			insert, err := db.Prepare(query)
@@ -38,28 +38,26 @@ func beforeEvictHook(db *sql.DB) func(map[string]int) {
 
 func handler(ec ecount.Ecount) gin.HandlerFunc {
 	fn := func(ginContext *gin.Context) {
-		ec.Incr(fmt.Sprintf("%s|%s", ginContext.Param("event"), time.Now().Format("2006010215")))
-		ginContext.Header("content-type", "application/json;charset=utf-8")
-		ginContext.JSON(http.StatusOK, gin.H{
-			"status": "ok",
-		})
+		key := fmt.Sprintf("%s|%s", ginContext.Param("shop"), time.Now().Format("2006010215"))
+		ec.Incr(key)
+		ginContext.JSON(http.StatusNoContent, nil)
 	}
 	return gin.HandlerFunc(fn)
 }
 
 func main() {
-	db, err := sql.Open("sqlite3", "/home/sankalpjonna/gowork/src/github.com/sankalpjonn/events/test.db")
+	db, err := sql.Open("mysql", "root:rootpluxpass@tcp(13.233.85.24)/tadpole")
 	if err != nil {
 		panic(err)
 	}
 	defer db.Close()
 
-	ec := ecount.New(time.Second*60, beforeEvictHook(db))
+	ec := ecount.New(time.Second*1, beforeEvictHook(db))
 	defer ec.Stop()
 
 	r := gin.New()
 	r.Use(gin.Logger())
-	r.GET("/events/:event", handler(ec))
+	r.GET("/chatlytics/:shop", handler(ec))
 
 	srv := &http.Server{
 		Addr:    ":8080",
