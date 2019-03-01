@@ -1,5 +1,5 @@
 # Chatlytics
-A simple service for tracking number of clicks on a chat button in a shopiy store
+A simple service for tracking number of clicks on a chat button in a shopify store
 
 ## Usage
 ```sh
