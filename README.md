@@ -1,6 +1,11 @@
 # Chatlytics
 A simple service for tracking number of clicks on a chat button in a shopify store
 
+## installation
+```sh
+go get github.com/sankalpjonn/chatlytics
+```
+
 ## Usage
 ```sh
 chatlytics --conn="username:password@tcp(mysql-host-addr)/db-name"
