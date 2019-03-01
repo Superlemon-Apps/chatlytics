@@ -17,22 +17,16 @@ import (
 	"github.com/sankalpjonn/ecount"
 )
 
-func beforeEvictHook(db *sql.DB) func(map[string]int) {
-	return func(eventCntMap map[string]int) {
-		query := "INSERT INTO chat_click_event(shop_id, day, hour, url, count) values(?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE count = count + values(count)"
-		for k, v := range eventCntMap {
-			insert, err := db.Prepare(query)
-			if err != nil {
-				panic(err)
-			}
+type evicted struct {
+	key string
+	val int
+}
 
-			_, err = insert.Exec(strings.Split(k, "|")[0], strings.Split(k, "|")[1], strings.Split(k, "|")[2], strings.Split(k, "|")[3], v)
-			if err != nil {
-				panic(err)
-			}
-			insert.Close()
+func beforeEvictHook(evictedC chan evicted) func(map[string]int) {
+	return func(eventCntMap map[string]int) {
+		for k, v := range eventCntMap {
+			evictedC <- evicted{key: k, val: v}
 		}
-		log.Println("ran eviction ", query)
 	}
 }
 
@@ -58,6 +52,28 @@ func handler(ec ecount.Ecount) gin.HandlerFunc {
 	return gin.HandlerFunc(fn)
 }
 
+func ingestToSql(evictedC chan evicted, db *sql.DB, evictionComplete chan bool) {
+	query := "INSERT INTO chat_click_event(shop_id, day, hour, url, count) values(?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE count = count + values(count)"
+
+	for ev := range evictedC {
+		insert, err := db.Prepare(query)
+		if err != nil {
+			panic(err)
+		}
+
+		_, err = insert.Exec(strings.Split(ev.key, "|")[0], strings.Split(ev.key, "|")[1], strings.Split(ev.key, "|")[2], strings.Split(ev.key, "|")[3], ev.val)
+		if err != nil {
+			panic(err)
+		}
+		insert.Close()
+
+		log.Println("ran eviction ", query)
+		time.Sleep(time.Second * 3)
+	}
+
+	evictionComplete <- true
+}
+
 func main() {
 	db, err := sql.Open("mysql", "root:rootpluxpass@tcp(13.233.85.24)/tadpole")
 	if err != nil {
@@ -65,7 +81,15 @@ func main() {
 	}
 	defer db.Close()
 
-	ec := ecount.New(time.Second*60, beforeEvictHook(db))
+	evictedC := make(chan evicted, 1000)
+	evictionComplete := make(chan bool)
+	go ingestToSql(evictedC, db, evictionComplete)
+	defer func() {
+		close(evictedC)
+		<-evictionComplete
+	}()
+
+	ec := ecount.New(time.Second*60, beforeEvictHook(evictedC))
 	defer ec.Stop()
 
 	r := gin.New()
