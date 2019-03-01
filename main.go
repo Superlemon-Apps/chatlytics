@@ -21,7 +21,6 @@ func beforeEvictHook(db *sql.DB) func(map[string]int) {
 	return func(eventCntMap map[string]int) {
 		query := "INSERT INTO chat_click_event(shop_id, day, hour, url, count) values(?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE count = count + values(count)"
 		for k, v := range eventCntMap {
-			log.Println("got query: ", query)
 			insert, err := db.Prepare(query)
 			if err != nil {
 				panic(err)
@@ -33,14 +32,26 @@ func beforeEvictHook(db *sql.DB) func(map[string]int) {
 			}
 			insert.Close()
 		}
+		log.Println("ran eviction ", query)
 	}
 }
 
 func handler(ec ecount.Ecount) gin.HandlerFunc {
 	fn := func(ginContext *gin.Context) {
 		t := time.Now()
-		log.Println("query ", ginContext.Query("url"))
-		key := fmt.Sprintf("%s|%s|%s|%s", ginContext.Query("shop_id"), t.Format("20060102"), t.Format("15"), ginContext.Query("url"))
+
+		if ginContext.Query("shop_id") == "" || ginContext.Query("url") == "" {
+			ginContext.JSON(http.StatusBadRequest, "mandatory elements not present")
+			return
+		}
+
+		key := fmt.Sprintf(
+			"%s|%s|%s|%s",
+			ginContext.Query("shop_id"),
+			t.Format("20060102"),
+			t.Format("15"),
+			ginContext.Query("url"))
+
 		ec.Incr(key)
 		ginContext.JSON(http.StatusNoContent, nil)
 	}
