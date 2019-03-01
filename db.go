@@ -2,12 +2,12 @@ package main
 
 import (
   "database/sql"
+
   _ "github.com/go-sql-driver/mysql"
 )
 
 const (
   DRIVER   = "mysql"
-  CONN_STR = "root:rootpluxpass@tcp(13.233.85.24)/tadpole"
 )
 
 type DBHandler interface {
@@ -30,8 +30,8 @@ func(self *dbhandler) Close() {
   self.db.Close()
 }
 
-func newDb(query string) DBHandler {
-  db, err := sql.Open(DRIVER, CONN_STR)
+func newDb(query string, connStr string) DBHandler {
+  db, err := sql.Open(DRIVER, connStr)
 	if err != nil {
 		panic(err)
 	}

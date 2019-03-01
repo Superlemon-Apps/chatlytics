@@ -6,9 +6,12 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	"flag"
 
 	"github.com/sankalpjonn/ecount"
 )
+
+var connStr string
 
 const (
 	CHAT_CLICKS_INSERT_QUERY = "INSERT INTO chat_click_event(shop_id, day, hour, url_path, count) values(?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE count = count + values(count)"
@@ -16,8 +19,11 @@ const (
 
 func main() {
 
+	flag.StringVar(&connStr, "conn", "", "mysql connection string")
+	flag.Parse()
+
 	// start database connection
-	db := newDb(CHAT_CLICKS_INSERT_QUERY)
+	db := newDb(CHAT_CLICKS_INSERT_QUERY, connStr)
 
 	// start data ingestor
 	ingestor := newIngestor(db)
