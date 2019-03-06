@@ -1,12 +1,12 @@
 package main
 
 import (
+	"flag"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
-	"flag"
 
 	"github.com/sankalpjonn/ecount"
 )
@@ -14,7 +14,7 @@ import (
 var connStr string
 
 const (
-	CHAT_CLICKS_INSERT_QUERY = "INSERT INTO chat_click_event(shop_id, day, hour, url_path, count) values(?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE count = count + values(count)"
+	CHAT_CLICKS_INSERT_QUERY = "INSERT INTO reporting_chatclickreport (shop_id, month, day, hour, url_path, num_clicks) values(?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE num_clicks = num_clicks + values(num_clicks)"
 )
 
 func main() {
@@ -48,7 +48,7 @@ func main() {
 	}()
 
 	// to be run on kill signal
-	defer func(){
+	defer func() {
 		// stop accountsepting new connections
 		stopServer(srv)
 
@@ -61,7 +61,6 @@ func main() {
 		// close database connection
 		db.Close()
 	}()
-
 
 	// wait for kill signal
 	sigc := make(chan os.Signal, 1)
