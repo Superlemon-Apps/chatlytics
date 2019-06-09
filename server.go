@@ -54,11 +54,12 @@ func CORSMiddleware() gin.HandlerFunc {
 	}
 }
 
-func getServer(ec ecount.Ecount) *http.Server {
+func getServer(ecChat ecount.Ecount, ecShare ecount.Ecount) *http.Server {
 	r := gin.New()
 	r.Use(gin.Logger())
 	r.Use(CORSMiddleware())
-	r.GET("/chatlytics/chat", handler(ec))
+	r.GET("/chatlytics/chat", handler(ecChat))
+	r.GET("/chatlytics/share", handler(ecShare))
 
 	// start server
 	return &http.Server{

@@ -14,7 +14,8 @@ import (
 var connStr string
 
 const (
-	CHAT_CLICKS_INSERT_QUERY = "INSERT INTO reporting_chatclickreport (shop_id, month, day, hour, url_path, num_clicks) values(?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE num_clicks = num_clicks + values(num_clicks)"
+	CHAT_CLICKS_INSERT_QUERY  = "INSERT INTO reporting_chatclickreport (shop_id, month, day, hour, url_path, num_clicks) values(?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE num_clicks = num_clicks + values(num_clicks)"
+	SHARE_CLICKS_INSERT_QUERY = "INSERT INTO reporting_shareclickreport (shop_id, month, day, hour, url_path, num_clicks) values(?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE num_clicks = num_clicks + values(num_clicks)"
 )
 
 func main() {
@@ -23,24 +24,37 @@ func main() {
 	flag.Parse()
 
 	// start database connection
-	db := newDb(CHAT_CLICKS_INSERT_QUERY, connStr)
+	chatDb  := newDb(CHAT_CLICKS_INSERT_QUERY, connStr)
+	shareDb := newDb(SHARE_CLICKS_INSERT_QUERY, connStr)
 
 	// start data ingestor
-	ingestor := newIngestor(db)
-	go ingestor.Start()
+	ingestorChat := newIngestor(chatDb)
+	go ingestorChat.Start()
+
+	ingestorShare := newIngestor(shareDb)
+	go ingestorShare.Start()
 
 	// start counter
-	ec := ecount.New(
+	ecChat := ecount.New(
 		time.Second*60,
 		func(eventCntMap map[string]int) {
 			for k, v := range eventCntMap {
-				ingestor.In() <- evicted{key: k, val: v}
+				ingestorChat.In() <- evicted{key: k, val: v}
+			}
+		},
+	)
+
+	ecShare := ecount.New(
+		time.Second*60,
+		func(eventCntMap map[string]int) {
+			for k, v := range eventCntMap {
+				ingestorShare.In() <- evicted{key: k, val: v}
 			}
 		},
 	)
 
 	// start http server
-	srv := getServer(ec)
+	srv := getServer(ecChat, ecShare)
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			panic(err)
@@ -53,13 +67,16 @@ func main() {
 		stopServer(srv)
 
 		// flush current counts
-		ec.Stop()
+		ecChat.Stop()
+		ecShare.Stop()
 
 		// finish ingesting current data
-		ingestor.Stop()
+		ingestorChat.Stop()
+		ingestorShare.Stop()
 
 		// close database connection
-		db.Close()
+		chatDb.Close()
+		shareDb.Close()
 	}()
 
 	// wait for kill signal
